@@ -1,0 +1,5 @@
+2dgaussian
+data
+outputs
+*.avi
+!*.py
