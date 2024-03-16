@@ -179,18 +179,24 @@ env_pcd, env_pcd_mask, env_attr = nerf.generate_point_cloud(use_bounding_box=Tru
 # %%
 # Semantic Query
 
-look_at = 'wall-e'
+look_at = 'kettle'
 look_at_similarity, look_at_mask, _ = query_semantics(look_at, nerf, threshold=0.85)
 look_at_attr = mask_attributes(env_attr, look_at_mask)
 
-go_to = 'electric drill'
+go_to = 'apple'
 go_to_similarity, go_to_mask, _ = query_semantics(go_to, nerf, threshold=0.85)
 go_to_attr = mask_attributes(env_attr, go_to_mask)
 
 # create the point cloud
 look_at_mesh = create_gs_mesh(look_at_attr, cs=None, res=4, probabilistic_factor=2)
 go_to_mesh = create_gs_mesh(go_to_attr, cs=None, res=4, probabilistic_factor=2)
-o3d.visualization.draw_geometries([look_at_mesh, go_to_mesh])
+# o3d.visualization.draw_geometries([look_at_mesh, go_to_mesh])
+
+# env_mesh = create_gs_mesh(env_attr, cs=None, res=3, probabilistic_factor=2)
+
+o3d.io.write_triangle_mesh(f'look_at_{look_at}.obj', look_at_mesh, print_progress=True)
+o3d.io.write_triangle_mesh(f'go_to_{go_to}.obj', go_to_mesh, print_progress=True)
+# o3d.io.write_triangle_mesh(f'env.obj', env_mesh, print_progress=True)
 
 #%%
 
@@ -212,6 +218,9 @@ spline_planner = SplinePlanner()
 
 # Random starting point
 s0 = np.random.rand(3)*(bound[:, 1] - bound[:, 0]) + bound[:, 0]
+# s0[-1] = -.2
+# s0 = np.array([-0.7, 0.5, -0.2])
+# s0 = np.array([0., -0.5, -0.2])
 
 # Test if this s0 point is collision-free
 inds = kdtree.query_ball_point(s0, radius, return_sorted=True, workers=-1)
@@ -225,11 +234,11 @@ if len(inds) > 0:
     mu_A = gsgrid.means[inds]
     A0, b0 = compute_polytope(R, D, kappa, mu_A, torch.from_numpy(s0).to(device=device, dtype=torch.float32), tau, bounding_poly_A, bounding_polys_b)
 
-    try:
-        s0 = check_and_project(A0, b0.squeeze(), s0)
-        assert s0 is not None
-    except:
-        raise AssertionError('Initial point is in collision. Please try again.')
+    # try:
+    #     s0 = check_and_project(A0, b0.squeeze(), s0)
+    #     assert s0 is not None
+    # except:
+    #     raise AssertionError('Initial point is in collision. Please try again.')
 
 goal = go_to_center
 
@@ -319,11 +328,14 @@ except:
 #%%
 # Compute 6DOF Pose Trajectory
 imgs = []
-
-for i, waypt in enumerate(traj):
+poses = []
+outs = []
+for i, waypt in enumerate(traj[::3]):
     pose = point_camera_pose(waypt[:3], look_at_center)
     outputs = nerf.render(torch.from_numpy(pose).to(dtype=torch.float32))
     imgs.append(outputs['rgb'].cpu().numpy())
+    poses.append(pose)
+    outs.append(outputs)
 
     print(f'Rendered pose {i}')
 
@@ -333,5 +345,21 @@ video = cv2.VideoWriter(f"look_at_{look_at} go_to_{go_to}.avi",fourcc,60, (imgs[
 for img in imgs:
     video.write(cv2.cvtColor((255*img).astype(np.uint8), cv2.COLOR_RGB2BGR))
 video.release()
+
+directory = f'Figures/look_at_{look_at} go_to_{go_to}'
+if not os.path.exists(directory):
+    os.makedirs(directory)
+for i, img in enumerate(imgs[::len(imgs)//8]):
+    cv2.imwrite(directory + f'/{i}.png', cv2.cvtColor((255*img).astype(np.uint8), cv2.COLOR_RGB2BGR))
+
+# %% Write traj
+
+save_path = f"Figures/look_at_{look_at} go_to_{go_to}/poses.json"
+data = {
+    'poses': [pose.tolist() for pose in poses]
+}
+
+with open(save_path, 'w') as f:
+    json.dump(data, f, indent=4)
 
 # %%

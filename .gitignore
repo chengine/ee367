@@ -3,3 +3,9 @@ data
 outputs
 *.avi
 !*.py
+*.obj
+*.avi
+*.blend*
+*.mtl
+*.json
+Figures
